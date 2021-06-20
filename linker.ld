@@ -27,4 +27,5 @@ SECTIONS {
         *(.bss .bss.*)
         . = ALIGN(16);
     }
+    _end = .;
 }

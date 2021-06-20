@@ -17,7 +17,8 @@ pub fn build(b: *std.build.Builder) void {
         "nasm",
         "-felf32",
         "-o", stage0_file,
-        "src/stage0.asm",
+        "-isrc/bootloader",
+        "src/bootloader/stage0.asm",
     });
 
     const stage1 = b.addExecutable("stage1", "src/main.zig");
@@ -43,6 +44,7 @@ pub fn build(b: *std.build.Builder) void {
     const qemu = b.addSystemCommand(&[_][]const u8{
         "qemu-system-i386",
         "-drive", "if=ide,format=raw,file=image.bin",
+        "-serial", "stdio",
     });
     qemu.step.dependOn(b.getInstallStep());
 

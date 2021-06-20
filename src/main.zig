@@ -3,7 +3,13 @@ const builtin = @import("builtin");
 
 const Serial = @import("io.zig").Serial;
 
+const mm = @import("mm.zig");
+
 const display = @intToPtr([*]volatile u16, 0xb8000);
+
+// Symbols provide by `linker.ld`
+extern const _start: usize;
+extern const _end: usize;
 
 export fn main(arg: u32) align(16) callconv(.C) noreturn {
     // "Zig"
@@ -21,13 +27,22 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
         builtin.mode,
     }) catch {};
 
+    out.print("Bootloader size: {} bytes\n", .{
+        @ptrToInt(&_end) - @ptrToInt(&_start),
+    }) catch {};
+
+    out.print("Memory map:\n", .{}) catch {};
+    mm.printMap(out) catch {};
+
     if (is_ok(arg)) {
         // "OK"
         display[160 + 0] = 0x0f4f;
         display[160 + 1] = 0x0f4b;
+        out.print("\x1b[32;1m" ++ "OK" ++ "\x1b[0m\n", .{}) catch {};
     }
 
     while (true) {
+        out.print("CPU halt.\n", .{}) catch {};
         asm volatile ("hlt");
     }
 }

@@ -1,4 +1,7 @@
 ; [org  0x7c00]
+
+%define PROGRAM_BASE 0x7c00
+
 [bits 16]
 
 extern main
@@ -86,7 +89,7 @@ boot_stage1:
     mov cr0, eax
 
     ; Transition to 32-bit mode by setting CS to a protected mode selector
-    jmp 0x0008:pm_entry
+    jmp 0x0018:pm_entry
 
 ; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -94,7 +97,7 @@ boot_stage1:
 
 pm_entry:
     ; Set up all data selectors
-    mov ax, 0x10
+    mov ax, 0x20
     mov es, ax
     mov ds, ax
     mov fs, ax
@@ -111,8 +114,10 @@ pm_entry:
 align 8
 gdt_base:
     dq 0x0000000000000000 ; 0x0000 | Null descriptor
-    dq 0x00cf9a000000ffff ; 0x0008 | 32-bit, present, code, base 0
-    dq 0x00cf92000000ffff ; 0x0010 | 32-bit, present, data, base 0
+    dq 0x00009a007c00ffff ; 0x0008 | 16-bit, present, code, base 0x7c00
+    dq 0x000092000000ffff ; 0x0010 | 16-bit, present, data, base 0
+    dq 0x00cf9a000000ffff ; 0x0018 | 32-bit, present, code, base 0
+    dq 0x00cf92000000ffff ; 0x0020 | 32-bit, present, data, base 0
 
 gdt:
     dw (gdt - gdt_base) - 1
@@ -137,6 +142,9 @@ entry_point:
     call main
 
 ; ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+%include 'asm_routines.asm'
+
 
     times 510-($-$$) db 0
     dw 0xaa55
