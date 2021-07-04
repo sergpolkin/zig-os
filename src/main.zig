@@ -4,6 +4,7 @@ const builtin = @import("builtin");
 const Serial = @import("io.zig").Serial;
 
 const mm = @import("mm.zig");
+const interrupts = @import("interrupts.zig");
 
 const display = @intToPtr([*]volatile u16, 0xb8000);
 
@@ -34,6 +35,11 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
     out.print("Memory map:\n", .{}) catch {};
     mm.printMap(out) catch {};
 
+    interrupts.init();
+
+    out.print("IDTR: ", .{}) catch {};
+    interrupts.print_idtr(out) catch {};
+
     if (is_ok(arg)) {
         // "OK"
         display[160 + 0] = 0x0f4f;
@@ -43,6 +49,7 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
 
     while (true) {
         out.print("CPU halt.\n", .{}) catch {};
+        asm volatile ("sti");
         asm volatile ("hlt");
     }
 }
