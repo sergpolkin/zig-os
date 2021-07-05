@@ -32,6 +32,8 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
         @ptrToInt(&_end) - @ptrToInt(&_start),
     }) catch {};
 
+    mm.init();
+
     out.print("Memory map:\n", .{}) catch {};
     mm.printMap(out) catch {};
 

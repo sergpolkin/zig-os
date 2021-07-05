@@ -1,15 +1,21 @@
 const std = @import("std");
 
+const mm = @import("mm.zig");
+
 fn default_handler() align(16) callconv(.Naked) noreturn {
     while (true) {
         asm volatile ("iret");
     }
 }
 
-// place IDT to Extended memory
-pub var idt = @intToPtr(*[256]IdtEntry, 0x0010_0000);
+// Interrupt Descriptor Table
+pub var idt: []IdtEntry = undefined;
 
 pub fn init() void {
+    // place IDT to Extended memory
+    idt = mm.GlobalAllocator.allocWithOptions(IdtEntry, 256, 4096, null) catch {
+        @panic("Error allocate IDT.");
+    };
     for (idt) |*entry, i| {
         const off = @ptrToInt(default_handler);
         const cs = 0x18; // code segment selector in GDT
@@ -22,9 +28,11 @@ pub fn init() void {
         entry.* = IdtEntry.init(cs, off, typ, ist, 0);
     }
     const idt_table = IdtTable{
-        .limit = idt.len * @sizeOf(IdtEntry) - 1,
-        .base = @ptrToInt(idt),
+        .limit = @truncate(u16, idt.len * @sizeOf(IdtEntry) - 1),
+        .base = @ptrToInt(idt.ptr),
     };
+    std.debug.assert(idt_table.limit == 0x07FF);
+    std.debug.assert(idt_table.base == 0x0010_0000);
     idt_table.load();
 }
 
