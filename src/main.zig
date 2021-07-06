@@ -56,6 +56,15 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
     }
 }
 
+// Handler for all interrupts
+export fn interrupt_handler(n: u8, arg1: u32, arg2: u32, arg3: u32) void {
+    const out = Serial.writer();
+    out.print("interrupt: 0x{x:0>2}\n", .{n}) catch {};
+    out.print("args: 0x{x:0>8}, 0x{x:0>8}, 0x{x:0>8}\n", .{
+        arg1, arg2, arg3,
+    }) catch {};
+}
+
 fn is_ok(arg: u32) bool {
     return arg == 0x12345678;
 }

@@ -2,11 +2,7 @@ const std = @import("std");
 
 const mm = @import("mm.zig");
 
-fn default_handler() align(16) callconv(.Naked) noreturn {
-    while (true) {
-        asm volatile ("iret");
-    }
-}
+const handlers = @import("interrupts/handlers.zig").handlers;
 
 // Interrupt Descriptor Table
 pub var idt: []IdtEntry = undefined;
@@ -17,7 +13,7 @@ pub fn init() void {
         @panic("Error allocate IDT.");
     };
     for (idt) |*entry, i| {
-        const off = @ptrToInt(default_handler);
+        const off = @ptrToInt(handlers[i]);
         const cs = 0x18; // code segment selector in GDT
         const typ = 0xe; // 32-bit interrupt gate
         const ist: u1 = switch (i) {
@@ -59,7 +55,10 @@ const IdtEntry = packed struct {
 
     pub fn dump(self: *const @This(), writer: anytype) !void {
         const entry = @ptrCast([*]const u8, self)[0..8];
-        try writer.print("{}\n", .{std.fmt.fmtSliceHexLower(entry)});
+        try writer.print("{}, offset 0x{x:0>8}\n", .{
+            std.fmt.fmtSliceHexLower(entry),
+            @as(u32, self.offset_1) | (@as(u32, self.offset_2) << 16),
+        });
     }
 };
 
