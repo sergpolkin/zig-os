@@ -2,7 +2,7 @@ const std = @import("std");
 
 const mm = @import("mm.zig");
 
-const handlers = @import("interrupts/handlers.zig").handlers;
+pub usingnamespace @import("interrupts/handlers.zig");
 
 // Interrupt Descriptor Table
 pub var idt: []IdtEntry = undefined;

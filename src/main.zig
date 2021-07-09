@@ -6,6 +6,9 @@ const Serial = @import("io.zig").Serial;
 const mm = @import("mm.zig");
 const interrupts = @import("interrupts.zig");
 
+const InterruptFrame = interrupts.InterruptFrame;
+const RegsState = interrupts.RegsState;
+
 const display = @intToPtr([*]volatile u16, 0xb8000);
 
 // Symbols provide by `linker.ld`
@@ -42,6 +45,8 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
     out.print("IDTR: ", .{}) catch {};
     interrupts.print_idtr(out) catch {};
 
+    interrupt_test() catch {};
+
     if (is_ok(arg)) {
         // "OK"
         display[160 + 0] = 0x0f4f;
@@ -56,13 +61,27 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
     }
 }
 
+fn interrupt_test() !void {
+    var buf = [4]u32 {1, 2, 3, 4};
+    asm volatile ("int $0" ::
+        [arg1] "{eax}" (buf[0]),
+        [arg2] "{ecx}" (buf[1]),
+        [arg3] "{edx}" (buf[2]),
+        [arg4] "{ebx}" (buf[3]) : "memory");
+}
+
 // Handler for all interrupts
-export fn interrupt_handler(n: u8, arg1: u32, arg2: u32, arg3: u32) void {
+export fn interrupt_handler(
+    n: u8,
+    frame: *InterruptFrame,
+    regs: *RegsState,
+    arg: u32,
+) void {
     const out = Serial.writer();
-    out.print("interrupt: 0x{x:0>2}\n", .{n}) catch {};
-    out.print("args: 0x{x:0>8}, 0x{x:0>8}, 0x{x:0>8}\n", .{
-        arg1, arg2, arg3,
-    }) catch {};
+    out.print("Interrupt: 0x{x:0>2}, arg: 0x{x:0>8}\n", .{n, arg}) catch {};
+    out.print("Registers:\n", .{}) catch {};
+    regs.print(out) catch {};
+    frame.print(out) catch {};
 }
 
 fn is_ok(arg: u32) bool {

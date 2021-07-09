@@ -105,7 +105,17 @@ pm_entry:
     mov ss, ax
 
     ; Set up a basic stack
-    mov esp, 0x7c00
+    mov esp, PROGRAM_BASE
+
+    ; Fill stack with '0xCC'
+    std
+    mov edi, PROGRAM_BASE-1
+    mov al, 0xCC
+    mov ecx, 0x2000
+    rep stosb
+
+    ; Clear direction flag
+    cld
 
     jmp entry_point
 
