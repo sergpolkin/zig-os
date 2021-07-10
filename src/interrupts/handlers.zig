@@ -1,6 +1,4 @@
 
-const FnHandler = fn() align(16) callconv(.Naked) noreturn;
-
 pub const InterruptFrame = packed struct {
     eip: u32,
     cs: u32,
@@ -39,6 +37,43 @@ pub const RegsState = packed struct {
     }
 };
 
+export fn zig_entry() align(16) callconv(.Naked) void {
+    asm volatile (
+        \\push 4(%%esp)
+        \\push %%ebx
+        \\push %%ecx
+        \\push %%edx
+        \\push %%esi
+        \\push %%edi
+        \\push %%ebp
+        ::: "memory"
+    );
+    asm volatile (
+        \\mov %%esp, %%ebp
+        \\mov %%esp, %%ecx
+        \\lea 0x24(%%esp), %%ebx
+        \\push $0x103
+        \\push %%ecx
+        \\push %%ebx
+        \\push %%eax
+        \\call interrupt_handler
+        \\mov %%ebp, %%esp
+        ::: "memory"
+    );
+    asm volatile (
+        \\pop %%ebp
+        \\pop %%edi
+        \\pop %%esi
+        \\pop %%edx
+        \\pop %%ecx
+        \\pop %%ebx
+        \\pop 4(%%esp)
+        ::: "memory"
+    );
+}
+
+const FnHandler = fn() align(16) callconv(.Naked) noreturn;
+
 // Create entry points for all interrupts
 pub const handlers = blk: {
     const N = 256;
@@ -52,40 +87,12 @@ pub const handlers = blk: {
 fn handler_init(comptime N: usize) FnHandler {
     const impl = struct {
         fn inner() align(16) callconv(.Naked) noreturn {
-            asm volatile (
-                \\push %%eax
-                \\push %%ebx
-                \\push %%ecx
-                \\push %%edx
-                \\push %%esi
-                \\push %%edi
-                \\push %%ebp
-                ::: "memory"
-            );
-            asm volatile (
-                \\mov %%esp, %%ebp
-                \\mov %%esp, %%ecx
-                \\lea 0x1c(%%esp), %%ebx
-                \\push $0x103
-                \\push %%ecx
-                \\push %%ebx
-                \\push %%eax
-                \\call interrupt_handler
-                \\mov %%ebp, %%esp
-                ::
+            asm volatile ("push %%eax");
+            asm volatile ("call zig_entry" ::
                 [n] "{al}" (@as(u8, N))
                 : "memory"
             );
-            asm volatile (
-                \\pop %%ebp
-                \\pop %%edi
-                \\pop %%esi
-                \\pop %%edx
-                \\pop %%ecx
-                \\pop %%ebx
-                \\pop %%eax
-                ::: "memory"
-            );
+            asm volatile ("pop %%eax");
             while (true) {
                 asm volatile ("iret");
             }
