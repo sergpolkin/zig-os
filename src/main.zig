@@ -73,12 +73,13 @@ fn interrupt_test() !void {
 // Handler for all interrupts
 export fn interrupt_handler(
     n: u8,
+    error_code: u32,
     frame: *InterruptFrame,
     regs: *RegsState,
-    arg: u32,
 ) void {
     const out = Serial.writer();
-    out.print("Interrupt: 0x{x:0>2}, arg: 0x{x:0>8}\n", .{n, arg}) catch {};
+    out.print("Interrupt: 0x{x:0>2}, error: 0x{x:0>8}\n",
+        .{n, error_code}) catch {};
     out.print("Registers:\n", .{}) catch {};
     regs.print(out) catch {};
     frame.print(out) catch {};

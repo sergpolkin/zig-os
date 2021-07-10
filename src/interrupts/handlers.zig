@@ -39,10 +39,10 @@ pub const RegsState = packed struct {
 
 export fn zig_entry() align(16) callconv(.Naked) void {
     asm volatile (
-        \\push 4(%%esp)
-        \\push %%ebx
-        \\push %%ecx
-        \\push %%edx
+        \\push 12(%%ecx)
+        \\push 8(%%ecx)
+        \\push 4(%%ecx)
+        \\push 0(%%ecx)
         \\push %%esi
         \\push %%edi
         \\push %%ebp
@@ -50,12 +50,10 @@ export fn zig_entry() align(16) callconv(.Naked) void {
     );
     asm volatile (
         \\mov %%esp, %%ebp
-        \\mov %%esp, %%ecx
-        \\lea 0x24(%%esp), %%ebx
-        \\push $0x103
-        \\push %%ecx
-        \\push %%ebx
-        \\push %%eax
+        \\push %%ebp              # all registers state
+        \\push %%edx              # interrupt frame
+        \\push %%ebx              # error code
+        \\push %%eax              # interrupt number
         \\call interrupt_handler
         \\mov %%ebp, %%esp
         ::: "memory"
@@ -67,7 +65,7 @@ export fn zig_entry() align(16) callconv(.Naked) void {
         \\pop %%edx
         \\pop %%ecx
         \\pop %%ebx
-        \\pop 4(%%esp)
+        \\pop %%eax
         ::: "memory"
     );
 }
@@ -85,14 +83,38 @@ pub const handlers = blk: {
 };
 
 fn handler_init(comptime N: usize) FnHandler {
+    const has_error_code = switch (N) {
+        8, 10, 11, 12, 13, 14, 17 => true,
+        else => false,
+    };
     const impl = struct {
         fn inner() align(16) callconv(.Naked) noreturn {
-            asm volatile ("push %%eax");
+            asm volatile (
+                \\push %%eax
+                \\push %%ebx
+                \\push %%ecx
+                \\push %%edx
+                \\mov %%esp, %%ecx
+            );
+            if (has_error_code) {
+                asm volatile ("lea 20(%%ecx), %%edx");
+                asm volatile ("mov 16(%%ecx), %%ebx");
+            }
+            else {
+                asm volatile ("lea 16(%%ecx), %%edx");
+                asm volatile ("xor %%ebx, %%ebx");
+            }
             asm volatile ("call zig_entry" ::
                 [n] "{al}" (@as(u8, N))
                 : "memory"
             );
-            asm volatile ("pop %%eax");
+            // 'pop' off the error code and registers
+            if (has_error_code) {
+                asm volatile ("add $20, %%esp");
+            }
+            else {
+                asm volatile ("add $16, %%esp");
+            }
             while (true) {
                 asm volatile ("iret");
             }

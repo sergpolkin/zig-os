@@ -17,8 +17,8 @@ pub fn init() void {
         const cs = 0x18; // code segment selector in GDT
         const typ = 0xe; // 32-bit interrupt gate
         const ist: u1 = switch (i) {
-            // NMI, #DF, #MC without IST for now
-            2, 8, 18, => 0,
+            // NMI, #DF, #MC use the IST
+            2, 8, 18, => 1,
             else => 0,
         };
         entry.* = IdtEntry.init(cs, off, typ, ist, 0);
