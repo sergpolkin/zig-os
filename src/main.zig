@@ -10,8 +10,7 @@ const interrupts = @import("interrupts.zig");
 
 const PIC = interrupts.PIC;
 
-const InterruptFrame = interrupts.InterruptFrame;
-const RegsState = interrupts.RegsState;
+const InterruptContext = interrupts.InterruptContext;
 
 const display = @intToPtr([*]volatile u16, 0xb8000);
 
@@ -113,32 +112,24 @@ fn keyboard_handler(out: anytype) !void {
 
 fn print_interrupt(
     out: anytype,
-    n: u8,
-    error_code: u32,
-    frame: *const InterruptFrame,
-    regs: *const RegsState,
+    ctx: *const InterruptContext,
 ) !void {
     try out.print(COLOR_YELLOW, .{});
     try out.print("Interrupt: {0d} 0x{0x:0>2}, error: 0x{1x:0>8}",
-        .{n, error_code});
+        .{ctx.n, ctx.error_code});
     try out.print("\n" ++ COLOR_RESET, .{});
     try out.print("Registers:\n", .{});
-    try regs.print(out);
-    try frame.print(out);
+    try ctx.regs.print(out);
+    try ctx.frame.print(out);
 }
 
 // Handler for all interrupts
-export fn interrupt_handler(
-    n: u8,
-    error_code: u32,
-    frame: *InterruptFrame,
-    regs: *RegsState,
-) void {
+export fn interrupt_handler(ctx: *InterruptContext) void {
     const out = Serial.writer();
-    switch (n) {
+    switch (ctx.n) {
         // 'Keyboard' IRQ?
         0x21 => keyboard_handler(out) catch {},
-        else => print_interrupt(out, n, error_code, frame, regs) catch {},
+        else => print_interrupt(out, ctx) catch {},
     }
 }
 

@@ -37,6 +37,13 @@ pub const RegsState = packed struct {
     }
 };
 
+pub const InterruptContext = packed struct {
+    n: u32,
+    error_code: u32,
+    frame: *InterruptFrame,
+    regs: *RegsState,
+};
+
 export fn zig_entry() align(16) callconv(.Naked) void {
     asm volatile (
         \\push 12(%%ecx)
@@ -49,13 +56,15 @@ export fn zig_entry() align(16) callconv(.Naked) void {
         ::: "memory"
     );
     asm volatile (
-        \\mov %%esp, %%ebp
-        \\push %%ebp              # all registers state
+        \\push %%esp              # all registers state
         \\push %%edx              # interrupt frame
         \\push %%ebx              # error code
         \\push %%eax              # interrupt number
+        \\mov %%esp, %%ebp
+        \\push %%esp              # interrupt context
         \\call interrupt_handler
         \\mov %%ebp, %%esp
+        \\add $16, %%esp          # 'pop' of interrupt context
         ::: "memory"
     );
     asm volatile (
@@ -105,7 +114,7 @@ fn handler_init(comptime N: usize) FnHandler {
                 asm volatile ("xor %%ebx, %%ebx");
             }
             asm volatile ("call zig_entry" ::
-                [n] "{al}" (@as(u8, N))
+                [n] "{eax}" (@as(u32, N))
                 : "memory"
             );
             // 'pop' off the error code and registers
