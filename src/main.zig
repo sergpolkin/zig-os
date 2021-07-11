@@ -1,15 +1,26 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const Serial = @import("io.zig").Serial;
+const io = @import("io.zig");
+const PortIO = io.PortIO;
+const Serial = io.Serial;
 
 const mm = @import("mm.zig");
 const interrupts = @import("interrupts.zig");
+
+const PIC = interrupts.PIC;
 
 const InterruptFrame = interrupts.InterruptFrame;
 const RegsState = interrupts.RegsState;
 
 const display = @intToPtr([*]volatile u16, 0xb8000);
+
+// some color codes for terminal
+const COLOR_GREEN = "\x1b[32;1m";
+const COLOR_YELLOW = "\x1b[33;1m";
+const COLOR_MAGENTA = "\x1b[35;1m";
+const COLOR_WHITE = "\x1b[37;1m";
+const COLOR_RESET = "\x1b[0m";
 
 // Symbols provide by `linker.ld`
 extern const _start: usize;
@@ -47,18 +58,30 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
 
     interrupt_test() catch {};
 
+    pic_init();
+
     if (is_ok(arg)) {
         // "OK"
         display[160 + 0] = 0x0f4f;
         display[160 + 1] = 0x0f4b;
-        out.print("\x1b[32;1m" ++ "OK" ++ "\x1b[0m\n", .{}) catch {};
+        out.print(COLOR_GREEN ++ "OK\n" ++ COLOR_RESET, .{}) catch {};
     }
 
     while (true) {
-        out.print("CPU halt.\n", .{}) catch {};
+        out.print(COLOR_MAGENTA ++ "CPU halt.\n" ++ COLOR_RESET, .{}) catch {};
         asm volatile ("sti");
         asm volatile ("hlt");
     }
+}
+
+fn pic_init() void {
+    // Disable all PIC, except 'Keyboard'
+    PIC.set_mask(.master, 0xfd);
+    PIC.set_mask(.slave, 0xff);
+    // Remap PIC IRQ0..7 -> INT0x20..0x27
+    PIC.remap(.master, 0x20);
+    // Remap PIC IRQ8..15 -> INT0x28..0x2F
+    PIC.remap(.slave, 0x28);
 }
 
 fn interrupt_test() !void {
@@ -70,6 +93,40 @@ fn interrupt_test() !void {
         [arg4] "{ebx}" (buf[3]) : "memory");
 }
 
+fn keyboard_handler(out: anytype) !void {
+    const KBD_COMMAND = 0x64;
+    const KBD_DATA = 0x60;
+    const status = PortIO.in(u8, KBD_COMMAND);
+    const scancode = if (status & 1 !=0) PortIO.in(u8, KBD_DATA) else null;
+    try out.print(COLOR_WHITE, .{});
+    if (scancode) |_| {
+        try out.print("Keyboard status: 0x{x:0>2}, ", .{status});
+        try out.print("scancode: 0x{x:0>2} ", .{scancode.?});
+    }
+    else {
+        try out.print("Keyboard status: 0x{x:0>2}", .{status});
+    }
+    try out.print("\n" ++ COLOR_RESET, .{});
+    // Send EOI
+    PIC.eoi(.master);
+}
+
+fn print_interrupt(
+    out: anytype,
+    n: u8,
+    error_code: u32,
+    frame: *const InterruptFrame,
+    regs: *const RegsState,
+) !void {
+    try out.print(COLOR_YELLOW, .{});
+    try out.print("Interrupt: {0d} 0x{0x:0>2}, error: 0x{1x:0>8}",
+        .{n, error_code});
+    try out.print("\n" ++ COLOR_RESET, .{});
+    try out.print("Registers:\n", .{});
+    try regs.print(out);
+    try frame.print(out);
+}
+
 // Handler for all interrupts
 export fn interrupt_handler(
     n: u8,
@@ -78,11 +135,11 @@ export fn interrupt_handler(
     regs: *RegsState,
 ) void {
     const out = Serial.writer();
-    out.print("Interrupt: 0x{x:0>2}, error: 0x{x:0>8}\n",
-        .{n, error_code}) catch {};
-    out.print("Registers:\n", .{}) catch {};
-    regs.print(out) catch {};
-    frame.print(out) catch {};
+    switch (n) {
+        // 'Keyboard' IRQ?
+        0x21 => keyboard_handler(out) catch {},
+        else => print_interrupt(out, n, error_code, frame, regs) catch {},
+    }
 }
 
 fn is_ok(arg: u32) bool {

@@ -4,6 +4,9 @@ const mm = @import("mm.zig");
 
 pub usingnamespace @import("interrupts/handlers.zig");
 
+// Programmable Interrupt Controller 8259
+pub const PIC = @import("interrupts/pic.zig");
+
 // Interrupt Descriptor Table
 pub var idt: []IdtEntry = undefined;
 
