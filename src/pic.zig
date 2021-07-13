@@ -1,4 +1,6 @@
-const PortIO = @import("../io.zig").PortIO;
+const PortIO = @import("io.zig").PortIO;
+
+/// Programmable Interrupt Controller 8259
 
 pub const PICChip = enum {
     master,
