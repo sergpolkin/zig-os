@@ -44,10 +44,20 @@ pub fn build(b: *std.build.Builder) void {
     const qemu = b.addSystemCommand(&[_][]const u8{
         "qemu-system-i386",
         "-drive", "if=ide,format=raw,file=image.bin",
-        "-serial", "stdio",
-    });
+    } ++ qemu_serial_conf);
     qemu.step.dependOn(b.getInstallStep());
 
     const run_qemu = b.step("run", "Run in qemu");
     run_qemu.dependOn(&qemu.step);
 }
+
+const qemu_serial_conf = [_][]const u8{
+    "-chardev", "stdio,id=com1",
+    "-chardev", "vc,id=com2",
+    "-chardev", "vc,id=com3",
+    "-chardev", "vc,id=com4",
+    "-serial", "chardev:com1",
+    "-serial", "chardev:com2",
+    "-serial", "chardev:com3",
+    "-serial", "chardev:com4",
+};

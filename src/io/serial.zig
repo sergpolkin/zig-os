@@ -6,7 +6,12 @@ const PortIO = @import("port.zig");
 const bda_base = 0x0400;
 
 // address IO ports for COM1-COM4 (`null` if not present)
-var ports: [4]?u16 = undefined;
+pub var ports: [4]?u16 = undefined;
+
+pub const IRQ_AVAIL = 1;   // Data available
+pub const IRQ_EMPTY = 2;   // Transmitter empty
+pub const IRQ_ERROR = 4;   // Break/error
+pub const IRQ_STATUS = 8;  // Status change
 
 pub fn init() void {
     for (@intToPtr(*const [4]u16, bda_base)) |addr, id| {
@@ -26,6 +31,28 @@ pub fn init() void {
     }
 }
 
+pub fn set_irq(port: usize, irq: u8) SerialError!void {
+    if (ports[port]) |addr| {
+        PortIO.out(u8, addr + 1, irq);
+    }
+    else return error.NotPresent;
+}
+
+pub fn read(port: usize) SerialError!u8 {
+    if (ports[port]) |addr| {
+        return if (try is_data_available(port))
+            PortIO.in(u8, addr) else error.NoData;
+    }
+    else return error.NotPresent;
+}
+
+pub fn is_data_available(port: usize) SerialError!bool {
+    if (ports[port]) |addr| {
+        return PortIO.in(u8, addr + 5) & 0x01 != 0;
+    }
+    else return error.NotPresent;
+}
+
 pub fn is_transmit_empty(port: usize) SerialError!bool {
     if (ports[port]) |addr| {
         return PortIO.in(u8, addr + 5) & 0x20 != 0;
@@ -43,6 +70,7 @@ pub fn write(port: usize, val: u8) SerialError!void {
 
 pub const SerialError = error {
     NotPresent,
+    NoData,
 };
 
 fn write_to_all(ctx: void, bytes: []const u8) SerialError!usize {

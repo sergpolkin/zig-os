@@ -2,6 +2,15 @@ const PortIO = @import("io.zig").PortIO;
 
 /// Programmable Interrupt Controller 8259
 
+pub const IRQ_TIMER = 0x01;
+pub const IRQ_KBD = 0x02;
+pub const IRQ_CASCADE = 0x04;
+pub const IRQ_COM2 = 0x08;
+pub const IRQ_COM1 = 0x10;
+pub const IRQ_LPT2 = 0x20;
+pub const IRQ_FLOPPY = 0x40;
+pub const IRQ_LPT1 = 0x80;
+
 pub const PICChip = enum {
     master,
     slave,

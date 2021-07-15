@@ -18,6 +18,13 @@ pub fn init() !void {
     // COM1-COM4 115200n1
     Serial.init();
 
+    // Enable interrupts on data receive.
+    for (Serial.ports) |addr, port| {
+        if (addr != null) {
+            try Serial.set_irq(port, Serial.IRQ_AVAIL);
+        }
+    }
+
     const out = Serial.writer();
 
     // Print prompt.
@@ -49,9 +56,10 @@ pub fn init() !void {
 }
 
 fn initPIC() void {
-    // Disable all IRQ, except 'Keyboard'
-    PIC.set_mask(.master, 0xfd);
-    PIC.set_mask(.slave, 0xff);
+    const irq_master: u8 = PIC.IRQ_KBD | PIC.IRQ_COM1 | PIC.IRQ_COM2;
+    const irq_slave: u8 = 0;
+    PIC.set_mask(.master, ~irq_master);
+    PIC.set_mask(.slave, ~irq_slave);
     // Remap PIC IRQ0..7 -> INT0x20..0x27
     PIC.remap(.master, 0x20);
     // Remap PIC IRQ8..15 -> INT0x28..0x2F
