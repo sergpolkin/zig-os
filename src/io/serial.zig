@@ -31,6 +31,13 @@ pub fn init() void {
     }
 }
 
+pub fn get_irq(port: usize) SerialError!u8 {
+    if (ports[port]) |addr| {
+        return PortIO.in(u8, addr + 1);
+    }
+    else return error.NotPresent;
+}
+
 pub fn set_irq(port: usize, irq: u8) SerialError!void {
     if (ports[port]) |addr| {
         PortIO.out(u8, addr + 1, irq);
@@ -40,8 +47,8 @@ pub fn set_irq(port: usize, irq: u8) SerialError!void {
 
 pub fn read(port: usize) SerialError!u8 {
     if (ports[port]) |addr| {
-        return if (try is_data_available(port))
-            PortIO.in(u8, addr) else error.NoData;
+        while (!(try is_data_available(port))) {}
+        return PortIO.in(u8, addr);
     }
     else return error.NotPresent;
 }
@@ -70,7 +77,6 @@ pub fn write(port: usize, val: u8) SerialError!void {
 
 pub const SerialError = error {
     NotPresent,
-    NoData,
 };
 
 fn write_to_all(ctx: void, bytes: []const u8) SerialError!usize {

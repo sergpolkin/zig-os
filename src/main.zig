@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 
 const os = @import("os.zig");
+const utils = @import("utils.zig");
 
 const io = @import("io.zig");
 const PortIO = io.PortIO;
@@ -9,6 +10,8 @@ const Serial = io.Serial;
 
 const interrupts = @import("interrupts.zig");
 const InterruptContext = interrupts.InterruptContext;
+
+const mm = @import("mm.zig");
 
 const PIC = @import("pic.zig");
 
@@ -21,6 +24,8 @@ const COLOR_YELLOW = "\x1b[33;1m";
 const COLOR_MAGENTA = "\x1b[35;1m";
 const COLOR_WHITE = "\x1b[37;1m";
 const COLOR_RESET = "\x1b[0m";
+
+var serialboot_mode: bool = false;
 
 export fn main(arg: u32) align(16) callconv(.C) noreturn {
     // "Zig"
@@ -44,6 +49,22 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
 
     while (true) {
         const out = Serial.writer();
+        if (serialboot_mode) {
+            defer serialboot_mode = false;
+            asm volatile ("cli");
+            // Boot from 'COM2'
+            const port = 1;
+            const allocator = mm.GlobalAllocator;
+            const buf = utils.serialboot(allocator, port) catch |err| {
+                const msg = COLOR_RED ++ "serialboot {}.\n" ++ COLOR_RESET;
+                out.print(msg, .{err}) catch {};
+                continue;
+            };
+            defer allocator.free(buf);
+            out.print("serialboot is done: {*} {} bytes.\n",
+                .{buf.ptr, buf.len}) catch {};
+            utils.dump(out, buf[0..0x100]) catch {};
+        }
         out.print(COLOR_MAGENTA ++ "CPU halt.\n" ++ COLOR_RESET, .{}) catch {};
         asm volatile ("sti");
         asm volatile ("hlt");
@@ -73,6 +94,13 @@ fn keyboard_handler(out: anytype) !void {
         try out.print("Keyboard status: 0x{x:0>2}", .{status});
     }
     try out.print("\n" ++ COLOR_RESET, .{});
+    if (scancode) |_| {
+        switch (scancode.?) {
+            // '1' - serialboot request
+            0x82 => serialboot_mode = true,
+            else => {},
+        }
+    }
     // Send EOI
     PIC.eoi(.master);
 }
@@ -96,7 +124,13 @@ fn serial_handler(out: anytype, n: u32) !void {
         else => @panic("serial_handler: IRQ error"),
     };
     const data = Serial.read(port) catch unreachable;
-    try out.print("Serial port {}: 0x{x:0>2}\n", .{port, data});
+    switch (data) {
+        '1' => {
+            try out.print("Serial port {}: serialboot request.\n", .{port});
+            serialboot_mode = true;
+        },
+        else => try out.print("Serial port {}: 0x{x:0>2}\n", .{port, data}),
+    }
     // Send EOI
     PIC.eoi(.master);
 }

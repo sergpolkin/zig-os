@@ -53,7 +53,7 @@ pub fn build(b: *std.build.Builder) void {
 
 const qemu_serial_conf = [_][]const u8{
     "-chardev", "stdio,id=com1",
-    "-chardev", "vc,id=com2",
+    "-chardev", "pty,id=com2",
     "-chardev", "vc,id=com3",
     "-chardev", "vc,id=com4",
     "-serial", "chardev:com1",
