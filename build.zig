@@ -1,5 +1,8 @@
 const std = @import("std");
 
+const Builder = std.build.Builder;
+const LibExeObjStep = std.build.LibExeObjStep;
+
 pub fn build(b: *std.build.Builder) void {
     const target = .{
         .cpu_arch = .i386,
@@ -31,6 +34,9 @@ pub fn build(b: *std.build.Builder) void {
     const stage1_obj = b.addInstallArtifact(stage1);
     b.installArtifact(stage1_obj.artifact);
 
+    const kernel = buildKernel(b);
+    kernel.setTarget(target);
+
     const image = b.addSystemCommand(&[_][]const u8{
         "objcopy",
         "-Obinary",
@@ -49,6 +55,15 @@ pub fn build(b: *std.build.Builder) void {
 
     const run_qemu = b.step("run", "Run in qemu");
     run_qemu.dependOn(&qemu.step);
+}
+
+fn buildKernel(b: *Builder) *LibExeObjStep {
+    const kernel = b.addExecutable("kernel", "src/kernel.zig");
+    kernel.setBuildMode(.Debug);
+    kernel.image_base = 0x4200_0000;
+    kernel.strip = true;
+    kernel.install();
+    return kernel;
 }
 
 const qemu_serial_conf = [_][]const u8{
