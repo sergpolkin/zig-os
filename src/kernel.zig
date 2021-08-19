@@ -4,13 +4,26 @@ export fn _start() u32 {
         count +%= 1;
         asm volatile ("nop");
     }
-    const status: u32 = 0x42;
-    const n: u32 = 1;
+    var n: u32 = undefined;
+    // `sys_write` for linux
+    n = 4;
+    const stdout: usize = 1;
+    const msg = "Hello world!\n";
+    const status = asm volatile ("int $0x80"
+        : [ret] "={eax}" (-> usize)
+        : [n] "{eax}" (n),
+          [fd] "{ebx}" (stdout),
+          [ptr] "{ecx}" (msg),
+          [size] "{edx}" (msg.len),
+        : "memory"
+    );
     // `sys_exit` for linux
-    asm volatile ("int $0x80"
-        :: [n] "{eax}" (n),
-        [status] "{ebx}" (status)
-        : "eax", "ebx"
+    n = 1;
+    _ = asm volatile ("int $0x80"
+        : [ret] "={eax}" (-> usize)
+        : [n] "{eax}" (n),
+          [status] "{ebx}" (status)
+        : "memory"
     );
     return status;
 }

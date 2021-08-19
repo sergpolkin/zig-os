@@ -4,10 +4,13 @@ pub fn out(comptime T: type, io: u16, val: T) void {
             8 => asm volatile ("outb %%al, %%dx"
                 :: [io] "{dx}" (io), [val] "{al}" (val),
                 : "eax", "edx"),
+            16 => asm volatile ("out %%ax, %%dx"
+                :: [io] "{dx}" (io), [val] "{ax}" (val),
+                : "eax", "edx"),
             32 => asm volatile ("out %%eax, %%dx"
                 :: [io] "{dx}" (io), [val] "{eax}" (val),
                 : "eax", "edx"),
-            else => @compileError("Only 8 and 32 bits access supported."),
+            else => @compileError("Only 8, 16 and 32 bits access supported."),
         },
         else => @compileError("Unsupported type '" ++ @typeName(T) ++ "'."),
     }
@@ -20,11 +23,15 @@ pub fn in(comptime T: type, io: u16) T {
                 : [ret] "={al}" (-> T)
                 : [io] "{dx}" (io)
                 : "eax", "edx"),
+            16 => asm volatile ("in %%dx, %%ax"
+                : [ret] "={ax}" (-> T)
+                : [io] "{dx}" (io)
+                : "eax", "edx"),
             32 => asm volatile ("in %%dx, %%eax"
                 : [ret] "={eax}" (-> T)
                 : [io] "{dx}" (io)
                 : "eax", "edx"),
-            else => @compileError("Only 8 and 32 bits access supported."),
+            else => @compileError("Only 8, 16 and 32 bits access supported."),
         },
         else => @compileError("Unsupported type '" ++ @typeName(T) ++ "'."),
     };

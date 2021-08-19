@@ -24,8 +24,12 @@ def main():
     # Generate `bootloader` binary
     subprocess.check_call(['objcopy', '-Obinary', bootloader, image])
 
-    # Append `kernel` elf
     with open(image, 'r+b') as image_fd:
+        # Get `bootloader` length
+        image_fd.seek(0, 2)
+        bootloader_len = image_fd.tell()
+        print(f"[gen_image] Bootloader size: {bootloader_len} bytes")
+        # Append `kernel` ELF file
         image_fd.seek(KERNEL_OFFSET, 0)
         _concat(image_fd, open(kernel, 'rb'))
 

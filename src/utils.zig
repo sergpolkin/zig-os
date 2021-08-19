@@ -3,9 +3,29 @@ const std = @import("std");
 pub const Elf = @import("utils/elf.zig");
 pub const Paging = @import("utils/paging.zig");
 
+const ATA = @import("io.zig").ATA;
 const Serial = @import("io.zig").Serial;
 
 const SFL = @import("utils/sfl.zig");
+
+pub fn ataboot(allocator: *std.mem.Allocator, kernel_offset: usize) ![]u8 {
+    var dev = try ATA.PIODevice(.Primary, .Master).init();
+    if (kernel_offset > dev.block_count * 512) {
+        return error.Abort;
+    }
+    // Read `kernel`
+    const size = @truncate(usize, dev.block_count * 512 - kernel_offset);
+    var buf = try allocator.allocAdvanced(u8, 16, size, .at_least);
+    errdefer allocator.free(buf);
+    var block: u64 = kernel_offset / 512;
+    var total: usize = 0;
+    while (total < size) {
+        try dev.read(block, buf[total..total+512]);
+        block += 1;
+        total += 512;
+    }
+    return buf;
+}
 
 pub fn serialboot(allocator: *std.mem.Allocator, port: usize) ![]u8 {
     // Disable interrupts for serial
