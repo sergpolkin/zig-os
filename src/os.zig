@@ -48,9 +48,9 @@ pub fn init() !void {
     try mm.printMap(out);
 
     // Initialize interrupts (IDT).
-    interrupts.init();
+    interrupts.idt.init(mm.GlobalAllocator);
     try out.print("IDTR: ", .{});
-    try interrupts.print_idtr(out);
+    try interrupts.idt.printIDTR(out);
 
     initPIC();
 }

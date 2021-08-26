@@ -7,22 +7,18 @@ const Elf = utils.Elf;
 const Paging = utils.Paging;
 
 const io = @import("io.zig");
-const PortIO = io.PortIO;
 const Serial = io.Serial;
-
-const interrupts = @import("interrupts.zig");
-const InterruptContext = interrupts.InterruptContext;
 
 const mm = @import("mm.zig");
 
-const PIC = @import("pic.zig");
+const isr = @import("isr.zig");
 
 const display = @intToPtr([*]volatile u16, 0xb8000);
 
 const tc = @import("term_color.zig");
 
-var serialboot_mode: bool = false;
-var ataboot_mode: bool = false;
+export var serialboot_mode: bool = false;
+export var ataboot_mode: bool = false;
 
 // Kernel offset in `image.bin`
 // From 'tools/gen_image.py'
@@ -39,6 +35,8 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
     };
 
     interrupt_test();
+
+    isr.init();
 
     Paging.init(mm.GlobalAllocator) catch @panic("Paging init error!");
 
@@ -134,100 +132,6 @@ fn interrupt_test() void {
         [arg2] "{ecx}" (buf[1]),
         [arg3] "{edx}" (buf[2]),
         [arg4] "{ebx}" (buf[3]) : "memory");
-}
-
-fn keyboard_handler(out: anytype) !void {
-    const KBD_COMMAND = 0x64;
-    const KBD_DATA = 0x60;
-    const status = PortIO.in(u8, KBD_COMMAND);
-    const scancode = if (status & 1 !=0) PortIO.in(u8, KBD_DATA) else null;
-    try out.print(tc.WHITE, .{});
-    if (scancode) |_| {
-        try out.print("Keyboard status: 0x{x:0>2}, ", .{status});
-        try out.print("scancode: 0x{x:0>2} ", .{scancode.?});
-    }
-    else {
-        try out.print("Keyboard status: 0x{x:0>2}", .{status});
-    }
-    try out.print("\n" ++ tc.RESET, .{});
-    if (scancode) |_| {
-        switch (scancode.?) {
-            // '1' - serialboot request
-            0x82 => serialboot_mode = true,
-            // '2' - ataboot request
-            0x83 => ataboot_mode = true,
-            else => {},
-        }
-    }
-    // Send EOI
-    PIC.eoi(.master);
-}
-
-fn serial_handler(out: anytype, n: u32) !void {
-    const port = switch (n) {
-        0x23 => blk: {
-            const is_com2 = Serial.is_data_available(1) catch false;
-            const is_com4 = Serial.is_data_available(3) catch false;
-            if (is_com2) break :blk @as(usize, 1)
-            else if (is_com4) break :blk @as(usize, 3)
-            else @panic("serial_handler: IRQ#23 error");
-        },
-        0x24 => blk: {
-            const is_com1 = Serial.is_data_available(0) catch false;
-            const is_com3 = Serial.is_data_available(2) catch false;
-            if (is_com1) break :blk @as(usize, 0)
-            else if (is_com3) break :blk @as(usize, 2)
-            else @panic("serial_handler: IRQ#24 error");
-        },
-        else => @panic("serial_handler: IRQ error"),
-    };
-    const data = Serial.read(port) catch unreachable;
-    switch (data) {
-        '1' => {
-            try out.print("Serial port {}: serialboot request.\n", .{port});
-            serialboot_mode = true;
-        },
-        '2' => {
-            try out.print("Serial port {}: ataboot request.\n", .{port});
-            ataboot_mode = true;
-        },
-        else => try out.print("Serial port {}: 0x{x:0>2}\n", .{port, data}),
-    }
-    // Send EOI
-    PIC.eoi(.master);
-}
-
-fn pagefault_handler(out: anytype) !void {
-    const cr2 = Paging.readCR2();
-    try out.print("Pagefault at 0x{x:0>8}\n", .{cr2});
-    @panic("Pagefault!");
-}
-
-fn print_interrupt(
-    out: anytype,
-    ctx: *const InterruptContext,
-) !void {
-    try out.print(tc.YELLOW, .{});
-    try out.print("Interrupt: {0d} 0x{0x:0>2}, error: 0x{1x:0>8}",
-        .{ctx.n, ctx.error_code});
-    try out.print("\n" ++ tc.RESET, .{});
-    try out.print("Registers:\n", .{});
-    try ctx.regs.print(out);
-    try ctx.frame.print(out);
-}
-
-// Handler for all interrupts
-export fn interrupt_handler(ctx: *InterruptContext) void {
-    const out = Serial.writer();
-    switch (ctx.n) {
-        // 'Page Fault'
-        0x0e => pagefault_handler(out) catch {},
-        // 'Keyboard'
-        0x21 => keyboard_handler(out) catch {},
-        // 'COM1-COM4'
-        0x23, 0x24 => serial_handler(out, ctx.n) catch {},
-        else => print_interrupt(out, ctx) catch {},
-    }
 }
 
 fn is_ok(arg: u32) bool {

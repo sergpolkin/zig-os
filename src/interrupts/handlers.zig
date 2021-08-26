@@ -1,49 +1,3 @@
-
-pub const InterruptFrame = packed struct {
-    eip: u32,
-    cs: u32,
-    eflags: u32,
-
-    pub fn print(self: *const @This(), writer: anytype) !void {
-        const msg =
-            \\eip {x:0>8}
-            \\eflags {x:0>8} cs {x:0>8}
-            \\
-        ;
-        try writer.print(msg, .{self.eip, self.eflags, self.cs});
-    }
-};
-
-// Structure containing all registers at the state of the interrupt
-pub const RegsState = packed struct {
-    ebp: u32,
-    edi: u32,
-    esi: u32,
-    edx: u32,
-    ecx: u32,
-    ebx: u32,
-    eax: u32,
-
-    pub fn print(self: *const @This(), writer: anytype) !void {
-        const msg =
-            \\eax {x:0>8} ecx {x:0>8} edx {x:0>8} ebx {x:0>8}
-            \\esp ???????? ebp {x:0>8} esi {x:0>8} edi {x:0>8}
-            \\
-        ;
-        try writer.print(msg, .{
-            self.eax, self.ecx, self.edx, self.ebx,
-            self.ebp, self.esi, self.edi,
-        });
-    }
-};
-
-pub const InterruptContext = packed struct {
-    n: u32,
-    error_code: u32,
-    frame: *InterruptFrame,
-    regs: *RegsState,
-};
-
 export fn zig_entry() align(16) callconv(.Naked) void {
     asm volatile (
         \\push 12(%%ecx)
@@ -62,7 +16,7 @@ export fn zig_entry() align(16) callconv(.Naked) void {
         \\push %%eax              # interrupt number
         \\mov %%esp, %%ebp
         \\push %%esp              # interrupt context
-        \\call interrupt_handler
+        \\call interruptRouter
         \\mov %%ebp, %%esp
         \\add $16, %%esp          # 'pop' of interrupt context
         ::: "memory"

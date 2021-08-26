@@ -9,7 +9,7 @@ export fn _start() u32 {
     n = 4;
     const stdout: usize = 1;
     const msg = "Hello world!\n";
-    const status = asm volatile ("int $0x80"
+    var status = asm volatile ("int $0x80"
         : [ret] "={eax}" (-> usize)
         : [n] "{eax}" (n),
           [fd] "{ebx}" (stdout),
@@ -19,7 +19,7 @@ export fn _start() u32 {
     );
     // `sys_exit` for linux
     n = 1;
-    _ = asm volatile ("int $0x80"
+    status = asm volatile ("int $0x80"
         : [ret] "={eax}" (-> usize)
         : [n] "{eax}" (n),
           [status] "{ebx}" (status)

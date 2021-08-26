@@ -1,81 +1,95 @@
 const std = @import("std");
 
-const mm = @import("mm.zig");
+const io = @import("io.zig");
+const Serial = io.Serial;
 
-pub usingnamespace @import("interrupts/handlers.zig");
+pub const idt = @import("interrupts/idt.zig");
 
-// Interrupt Descriptor Table
-pub var idt: []IdtEntry = undefined;
+pub const InterruptFrame = packed struct {
+    eip: u32,
+    cs: u32,
+    eflags: u32,
 
-pub fn init() void {
-    // place IDT to Extended memory
-    idt = mm.GlobalAllocator.allocWithOptions(IdtEntry, 256, 4096, null) catch {
-        @panic("Error allocate IDT.");
-    };
-    for (idt) |*entry, i| {
-        const off = @ptrToInt(handlers[i]);
-        const cs = 0x18; // code segment selector in GDT
-        const typ = 0xe; // 32-bit interrupt gate
-        const ist: u1 = switch (i) {
-            // NMI, #DF, #MC use the IST
-            2, 8, 18, => 1,
-            else => 0,
-        };
-        entry.* = IdtEntry.init(cs, off, typ, ist, 0);
+    pub fn print(self: *const @This(), writer: anytype) !void {
+        const msg =
+            \\eip {x:0>8}
+            \\eflags {x:0>8} cs {x:0>8}
+            \\
+        ;
+        try writer.print(msg, .{self.eip, self.eflags, self.cs});
     }
-    const idt_table = IdtTable{
-        .limit = @truncate(u16, idt.len * @sizeOf(IdtEntry) - 1),
-        .base = @ptrToInt(idt.ptr),
-    };
-    std.debug.assert(idt_table.limit == 0x07FF);
-    std.debug.assert(idt_table.base == 0x0010_0000);
-    idt_table.load();
-}
+};
 
-const IdtEntry = packed struct {
-    offset_1: u16,
-    selector: u16,
-    zeroes: u8,
-    type_attr: u8,
-    offset_2: u16,
+// Structure containing all registers at the state of the interrupt
+pub const RegsState = packed struct {
+    ebp: u32,
+    edi: u32,
+    esi: u32,
+    edx: u32,
+    ecx: u32,
+    ebx: u32,
+    eax: u32,
 
-    fn init(cs: u16, off: u32, typ: u4, ist: u1, dpl: u2) @This() {
-        return .{
-            .offset_1 = @truncate(u16, off),
-            .selector = cs,
-            .zeroes = 0,
-            .type_attr =
-                @as(u8, 1) << 7 |    // P - present
-                @as(u8, dpl) << 5 |  // DPL - Descriptor Privilege Level
-                @as(u8, ist) << 4 |  // S - Storage Segment
-                @as(u8, typ),        // Type - Gate Type
-            .offset_2 = @truncate(u16, off >> 16),
-        };
-    }
-
-    pub fn dump(self: *const @This(), writer: anytype) !void {
-        const entry = @ptrCast([*]const u8, self)[0..8];
-        try writer.print("{}, offset 0x{x:0>8}\n", .{
-            std.fmt.fmtSliceHexLower(entry),
-            @as(u32, self.offset_1) | (@as(u32, self.offset_2) << 16),
+    pub fn print(self: *const @This(), writer: anytype) !void {
+        const msg =
+            \\eax {x:0>8} ecx {x:0>8} edx {x:0>8} ebx {x:0>8}
+            \\esp ???????? ebp {x:0>8} esi {x:0>8} edi {x:0>8}
+            \\
+        ;
+        try writer.print(msg, .{
+            self.eax, self.ecx, self.edx, self.ebx,
+            self.ebp, self.esi, self.edi,
         });
     }
 };
 
-const IdtTable = packed struct {
-    limit: u16,
-    base: u32,
-
-    fn load(self: @This()) void {
-        asm volatile ("lidt (%%eax)"
-            :: [self] "{eax}" (self) : "memory");
-    }
+pub const InterruptContext = packed struct {
+    n: u32,
+    error_code: u32,
+    frame: *InterruptFrame,
+    regs: *RegsState,
 };
 
-pub fn print_idtr(writer: anytype) !void {
-    var idtr: [6]u8 = undefined;
-    asm volatile ("sidt (%%eax)"
-        :: [idtr] "{eax}" (idtr) : "memory");
-    try writer.print("{}\n", .{std.fmt.fmtSliceHexLower(&idtr)});
+pub const InterruptHandler = fn(ctx: *InterruptContext) InterruptError!void;
+pub const InterruptError = Serial.SerialError;
+
+var interrupt_table = [_]?InterruptHandler{null}**256;
+
+// Add interrupt handler to table
+pub fn add(n: u8, handler: InterruptHandler) void {
+    interrupt_table[n] = handler;
 }
 
+// Remove interrupt handler
+pub fn remove(n: u8) void {
+    interrupt_table[n] = null;
+}
+
+// Default interrupt handler
+fn default(ctx: *const InterruptContext) InterruptError!void {
+    const tc = @import("term_color.zig");
+    const out = Serial.writer();
+
+    try out.print(tc.YELLOW, .{});
+    try out.print("Interrupt: {0d} 0x{0x:0>2}, error: 0x{1x:0>8}",
+        .{ctx.n, ctx.error_code});
+    try out.print("\n" ++ tc.RESET, .{});
+    try out.print("Registers:\n", .{});
+    try ctx.regs.print(out);
+    try ctx.frame.print(out);
+}
+
+// Handler for all interrupts
+export fn interruptRouter(ctx: *InterruptContext) void {
+    if (interrupt_table[ctx.n]) |handler| {
+        handler(ctx) catch |err| {
+            const out = Serial.writer();
+            out.print("[isr] error at {}: {}\n", .{
+                handler, err,
+            }) catch {};
+        };
+    }
+    else {
+        default(ctx) catch {};
+    }
+}
