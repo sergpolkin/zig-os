@@ -19,13 +19,7 @@ const PIC = @import("pic.zig");
 
 const display = @intToPtr([*]volatile u16, 0xb8000);
 
-// some color codes for terminal
-const COLOR_RED = "\x1b[31;1m";
-const COLOR_GREEN = "\x1b[32;1m";
-const COLOR_YELLOW = "\x1b[33;1m";
-const COLOR_MAGENTA = "\x1b[35;1m";
-const COLOR_WHITE = "\x1b[37;1m";
-const COLOR_RESET = "\x1b[0m";
+const tc = @import("term_color.zig");
 
 var serialboot_mode: bool = false;
 var ataboot_mode: bool = false;
@@ -53,7 +47,7 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
         display[160 + 0] = 0x0f4f;
         display[160 + 1] = 0x0f4b;
         const out = Serial.writer();
-        out.print(COLOR_GREEN ++ "OK\n" ++ COLOR_RESET, .{}) catch {};
+        out.print(tc.GREEN ++ "OK\n" ++ tc.RESET, .{}) catch {};
     }
 
     while (true) {
@@ -66,7 +60,7 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
             const port = 1;
             const allocator = mm.GlobalAllocator;
             const buf = utils.serialboot(allocator, port) catch |err| {
-                const msg = COLOR_RED ++ "serialboot {}.\n" ++ COLOR_RESET;
+                const msg = tc.RED ++ "serialboot {}.\n" ++ tc.RESET;
                 out.print(msg, .{err}) catch {};
                 continue;
             };
@@ -74,11 +68,11 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
             out.print("serialboot is done: {*} {} bytes.\n",
                 .{buf.ptr, buf.len}) catch {};
             const r = execElf(buf, out) catch |err| {
-                const msg = COLOR_RED ++ "ELF exec {}.\n" ++ COLOR_RESET;
+                const msg = tc.RED ++ "ELF exec {}.\n" ++ tc.RESET;
                 out.print(msg, .{err}) catch {};
                 continue;
             };
-            const msg = COLOR_GREEN ++ "Exit code: 0x{x}\n" ++ COLOR_RESET;
+            const msg = tc.GREEN ++ "Exit code: 0x{x}\n" ++ tc.RESET;
             out.print(msg, .{r}) catch {};
         }
 
@@ -87,7 +81,7 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
             asm volatile ("cli");
             const allocator = mm.GlobalAllocator;
             const buf = utils.ataboot(allocator, KERNEL_OFFSET) catch |err| {
-                const msg = COLOR_RED ++ "ataboot {}.\n" ++ COLOR_RESET;
+                const msg = tc.RED ++ "ataboot {}.\n" ++ tc.RESET;
                 out.print(msg, .{err}) catch {};
                 continue;
             };
@@ -95,15 +89,15 @@ export fn main(arg: u32) align(16) callconv(.C) noreturn {
             out.print("ataboot is done: {*} {} bytes.\n",
                 .{buf.ptr, buf.len}) catch {};
             const r = execElf(buf, out) catch |err| {
-                const msg = COLOR_RED ++ "ELF exec {}.\n" ++ COLOR_RESET;
+                const msg = tc.RED ++ "ELF exec {}.\n" ++ tc.RESET;
                 out.print(msg, .{err}) catch {};
                 continue;
             };
-            const msg = COLOR_GREEN ++ "Exit code: 0x{x}\n" ++ COLOR_RESET;
+            const msg = tc.GREEN ++ "Exit code: 0x{x}\n" ++ tc.RESET;
             out.print(msg, .{r}) catch {};
         }
 
-        out.print(COLOR_MAGENTA ++ "CPU halt.\n" ++ COLOR_RESET, .{}) catch {};
+        out.print(tc.MAGENTA ++ "CPU halt.\n" ++ tc.RESET, .{}) catch {};
         asm volatile ("sti");
         asm volatile ("hlt");
     }
@@ -147,7 +141,7 @@ fn keyboard_handler(out: anytype) !void {
     const KBD_DATA = 0x60;
     const status = PortIO.in(u8, KBD_COMMAND);
     const scancode = if (status & 1 !=0) PortIO.in(u8, KBD_DATA) else null;
-    try out.print(COLOR_WHITE, .{});
+    try out.print(tc.WHITE, .{});
     if (scancode) |_| {
         try out.print("Keyboard status: 0x{x:0>2}, ", .{status});
         try out.print("scancode: 0x{x:0>2} ", .{scancode.?});
@@ -155,7 +149,7 @@ fn keyboard_handler(out: anytype) !void {
     else {
         try out.print("Keyboard status: 0x{x:0>2}", .{status});
     }
-    try out.print("\n" ++ COLOR_RESET, .{});
+    try out.print("\n" ++ tc.RESET, .{});
     if (scancode) |_| {
         switch (scancode.?) {
             // '1' - serialboot request
@@ -213,10 +207,10 @@ fn print_interrupt(
     out: anytype,
     ctx: *const InterruptContext,
 ) !void {
-    try out.print(COLOR_YELLOW, .{});
+    try out.print(tc.YELLOW, .{});
     try out.print("Interrupt: {0d} 0x{0x:0>2}, error: 0x{1x:0>8}",
         .{ctx.n, ctx.error_code});
-    try out.print("\n" ++ COLOR_RESET, .{});
+    try out.print("\n" ++ tc.RESET, .{});
     try out.print("Registers:\n", .{});
     try ctx.regs.print(out);
     try ctx.frame.print(out);
@@ -250,7 +244,7 @@ pub fn panic(msg: []const u8, bt: ?*std.builtin.StackTrace) noreturn {
     display[5] = 0x0c21;
 
     const out = Serial.writer();
-    out.print(COLOR_RED ++ "PANIC \"{s}\"\n" ++ COLOR_RESET, .{
+    out.print(tc.RED ++ "PANIC \"{s}\"\n" ++ tc.RESET, .{
         msg,
     }) catch {};
 
